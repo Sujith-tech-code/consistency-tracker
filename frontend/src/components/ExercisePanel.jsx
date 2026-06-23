@@ -1,0 +1,260 @@
+import { useEffect, useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
+import axiosInstance from '../api/axiosInstance';
+import { isToday, isPast } from '../utils/dateUtils';
+
+export default function ExercisePanel({ selectedDate }) {
+  const [exercises, setExercises] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [newName, setNewName] = useState('');
+
+  const past = isPast(selectedDate);
+  const today = isToday(selectedDate);
+  const canEdit = !past;
+
+  useEffect(() => {
+    setEditMode(false);
+    const fetchDay = async () => {
+      setLoading(true);
+      try {
+        const res = await axiosInstance.get(`/days/${selectedDate}`);
+        setExercises(res.data.exercises || []);
+      } catch {
+        setExercises([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchDay();
+  }, [selectedDate]);
+
+  const saveExercises = async (updatedList) => {
+  setSaving(true);
+  try {
+    await axiosInstance.put(`/days/${selectedDate}`, {
+      exercises: updatedList,
+    });
+    // Don't overwrite local state with the response —
+    // it just swaps tempId -> real _id and causes a remount glitch.
+    // Local state is already correct from the optimistic update.
+  } catch (err) {
+    console.error('Failed to save', err);
+  } finally {
+    setSaving(false);
+  }
+};
+  const handleToggle = (id) => {
+    const updated = exercises.map((ex) =>
+      (ex._id || ex.tempId) === id ? { ...ex, completed: !ex.completed } : ex
+    );
+    setExercises(updated);
+    saveExercises(updated);
+  };
+
+  const handleAdd = () => {
+    if (!newName.trim()) return;
+    const updated = [
+      ...exercises,
+      { name: newName.trim(), completed: false, order: exercises.length, tempId: Date.now() },
+    ];
+    setExercises(updated);
+    setNewName('');
+    saveExercises(updated);
+  };
+
+  const handleDelete = (id) => {
+    const updated = exercises
+      .filter((ex) => (ex._id || ex.tempId) !== id)
+      .map((ex, idx) => ({ ...ex, order: idx }));
+    setExercises(updated);
+    saveExercises(updated);
+  };
+
+  const handleDragEnd = (result) => {
+    if (!result.destination) return;
+    const reordered = Array.from(exercises);
+    const [moved] = reordered.splice(result.source.index, 1);
+    reordered.splice(result.destination.index, 0, moved);
+    const withOrder = reordered.map((ex, idx) => ({ ...ex, order: idx }));
+    setExercises(withOrder);
+    saveExercises(withOrder);
+  };
+
+  const sorted = [...exercises].sort((a, b) => a.order - b.order);
+
+  return (
+    <div style={styles.panel}>
+      <div style={styles.headerRow}>
+        <h3 style={styles.dateLabel}>{today ? 'Today' : selectedDate}</h3>
+        {canEdit && (
+          <motion.button
+            whileTap={{ scale: 0.94 }}
+            onClick={() => setEditMode(!editMode)}
+            style={styles.editBtn}
+          >
+            {editMode ? 'Done' : 'Edit'}
+          </motion.button>
+        )}
+      </div>
+
+      {loading ? (
+        <div style={styles.loading}>Loading...</div>
+      ) : sorted.length === 0 && !editMode ? (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={styles.emptyState}>
+          {past ? null : <p>Add exercises for this day</p>}
+        </motion.div>
+      ) : (
+        <DragDropContext onDragEnd={handleDragEnd}>
+          <Droppable droppableId="exercise-list" isDropDisabled={!editMode}>
+            {(provided) => (
+              <div ref={provided.innerRef} {...provided.droppableProps}>
+                <AnimatePresence>
+                  {sorted.map((ex, index) => {
+                    const id = ex._id || ex.tempId;
+                    return (
+                      <Draggable key={id} draggableId={String(id)} index={index} isDragDisabled={!editMode}>
+                        {(dragProvided, snapshot) => (
+                          <motion.div
+                            ref={dragProvided.innerRef}
+                            {...dragProvided.draggableProps}
+                            initial={{ opacity: 0, x: -8 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0 }}
+                            style={{
+                              ...styles.exerciseRow,
+                              ...dragProvided.draggableProps.style,
+                              background: snapshot.isDragging ? 'var(--bg-input)' : 'transparent',
+                            }}
+                          >
+                            {editMode && (
+                              <span {...dragProvided.dragHandleProps} style={styles.dragHandle}>
+                                ⠿
+                              </span>
+                            )}
+                            <motion.div
+                              whileTap={{ scale: 0.85 }}
+                              animate={ex.completed ? { scale: [1, 1.35, 1] } : { scale: 1 }}
+                              transition={{ duration: 0.3, ease: 'easeOut' }}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={ex.completed}
+                                disabled={past || saving}
+                                onChange={() => handleToggle(id)}
+                                style={styles.checkbox}
+                              />
+                            </motion.div>
+                            <motion.span
+                              key={ex.completed}
+                              initial={{ opacity: 0.4 }}
+                              animate={{ opacity: 1 }}
+                              transition={{ duration: 0.25 }}
+                              style={ex.completed ? styles.completedText : styles.exerciseText}
+                            >
+                              {ex.name}
+                            </motion.span>
+                            {editMode && (
+                              <motion.button
+                                whileTap={{ scale: 0.9 }}
+                                onClick={() => handleDelete(id)}
+                                style={styles.deleteBtn}
+                              >
+                                ✕
+                              </motion.button>
+                            )}
+                          </motion.div>
+                        )}
+                      </Draggable>
+                    );
+                  })}
+                </AnimatePresence>
+                {provided.placeholder}
+              </div>
+            )}
+          </Droppable>
+        </DragDropContext>
+      )}
+
+      {editMode && (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={styles.addRow}>
+          <input
+            type="text"
+            placeholder="New exercise..."
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
+            style={styles.addInput}
+          />
+          <motion.button whileTap={{ scale: 0.94 }} onClick={handleAdd} style={styles.addBtn}>
+            Add
+          </motion.button>
+        </motion.div>
+      )}
+    </div>
+  );
+}
+
+const styles = {
+  panel: {
+    background: 'var(--bg-elevated)',
+    border: '1px solid var(--border-color)',
+    borderRadius: '14px',
+    padding: '1.25rem',
+    height: '100%',
+  },
+  headerRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' },
+  dateLabel: { margin: 0, fontSize: '1.1rem', fontWeight: 600 },
+  editBtn: {
+    background: 'transparent',
+    border: '1px solid var(--accent)',
+    color: 'var(--accent)',
+    borderRadius: '6px',
+    padding: '0.3rem 0.7rem',
+    fontSize: '0.8rem',
+    cursor: 'pointer',
+  },
+  loading: { color: 'var(--text-secondary)', fontSize: '0.9rem' },
+  emptyState: { color: 'var(--text-secondary)', fontSize: '0.9rem', fontStyle: 'italic' },
+  exerciseRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.6rem',
+    padding: '0.5rem 0.25rem',
+    borderBottom: '1px solid var(--border-color)',
+    borderRadius: '6px',
+  },
+  dragHandle: { cursor: 'grab', color: 'var(--text-secondary)' },
+  checkbox: { accentColor: 'var(--accent)', width: '16px', height: '16px', cursor: 'pointer' },
+  exerciseText: { flex: 1 },
+ completedText: { flex: 1, color: 'var(--accent)', fontWeight: 600 },
+  deleteBtn: {
+    background: 'transparent',
+    border: 'none',
+    color: 'var(--danger)',
+    cursor: 'pointer',
+    fontSize: '0.9rem',
+  },
+  addRow: { display: 'flex', gap: '0.5rem', marginTop: '1rem' },
+  addInput: {
+    flex: 1,
+    background: 'var(--bg-input)',
+    border: '1px solid var(--border-color)',
+    borderRadius: '8px',
+    padding: '0.5rem 0.75rem',
+    color: 'var(--text-primary)',
+    fontSize: '0.9rem',
+    outline: 'none',
+  },
+  addBtn: {
+    background: 'var(--accent)',
+    color: '#0d0f12',
+    border: 'none',
+    borderRadius: '8px',
+    padding: '0.5rem 1rem',
+    fontWeight: 600,
+    cursor: 'pointer',
+  },
+};
