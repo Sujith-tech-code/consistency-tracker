@@ -1,27 +1,21 @@
-import { useEffect, useRef, useState } from 'react';
-import { motion } from 'framer-motion';
+import { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useEffect } from 'react';
 import axiosInstance from '../api/axiosInstance';
 import { formatDate } from '../utils/dateUtils';
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const MONTHS_BACK = 1;
-const MONTHS_FORWARD = 2;
+const VISIBLE_COUNT = 4; // how many months shown at once
 
-function buildMonthsList() {
-  const today = new Date();
-  const months = [];
-  for (let i = -MONTHS_BACK; i <= MONTHS_FORWARD; i++) {
-    const d = new Date(today.getFullYear(), today.getMonth() + i, 1);
-    months.push({ year: d.getFullYear(), month: d.getMonth() });
-  }
-  return months;
+function shiftMonth(year, month, delta) {
+  const d = new Date(year, month + delta, 1);
+  return { year: d.getFullYear(), month: d.getMonth() };
 }
 
 function getMonthCells(year, month) {
   const firstDay = new Date(year, month, 1);
   const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const startOffset = firstDay.getDay(); // 0 = Sun, matches our Sun-start columns directly
-
+  const startOffset = firstDay.getDay();
   const cells = [];
   for (let i = 0; i < startOffset; i++) cells.push(null);
   for (let d = 1; d <= daysInMonth; d++) cells.push(new Date(year, month, d));
@@ -41,11 +35,17 @@ const getColor = (completed, total) => {
 };
 
 export default function Calendar({ selectedDate, onSelectDate }) {
-  const [months] = useState(buildMonthsList);
-  const [daysData, setDaysData] = useState({});
-  const scrollRef = useRef(null);
-  const todayStr = formatDate(new Date());
   const today = new Date();
+  const todayStr = formatDate(today);
+
+  // anchorOffset = how many months away from "today's month" the window starts
+  const [anchorOffset, setAnchorOffset] = useState(-1); // start showing 1 month back
+  const [daysData, setDaysData] = useState({});
+
+  const months = [];
+  for (let i = 0; i < VISIBLE_COUNT; i++) {
+    months.push(shiftMonth(today.getFullYear(), today.getMonth(), anchorOffset + i));
+  }
 
   useEffect(() => {
     const fetchAll = async () => {
@@ -63,49 +63,39 @@ export default function Calendar({ selectedDate, onSelectDate }) {
       }
     };
     fetchAll();
-  }, []);
+  }, [anchorOffset]);
 
-  useEffect(() => {
-    const el = scrollRef.current?.querySelector('[data-current-month="true"]');
-    if (el) el.scrollIntoView({ inline: 'start', block: 'nearest' });
-  }, []);
-
-  const scrollByMonth = (dir) => {
-    if (!scrollRef.current) return;
-    const block = scrollRef.current.querySelector('.month-block');
-    const blockWidth = block ? block.offsetWidth : 260;
-    scrollRef.current.scrollBy({ left: dir * (blockWidth + 24), behavior: 'smooth' });
-  };
+  const goPrev = () => setAnchorOffset((prev) => prev - 1);
+  const goNext = () => setAnchorOffset((prev) => prev + 1);
 
   return (
     <div style={styles.wrapper}>
       <div style={styles.headerRow}>
         <h3 style={styles.title}>Activity</h3>
         <div style={styles.arrowGroup}>
-          <motion.button whileTap={{ scale: 0.9 }} onClick={() => scrollByMonth(-1)} style={styles.navBtn}>←</motion.button>
-          <motion.button whileTap={{ scale: 0.9 }} onClick={() => scrollByMonth(1)} style={styles.navBtn}>→</motion.button>
+          <motion.button whileTap={{ scale: 0.9 }} onClick={goPrev} style={styles.navBtn}>←</motion.button>
+          <motion.button whileTap={{ scale: 0.9 }} onClick={goNext} style={styles.navBtn}>→</motion.button>
         </div>
       </div>
 
-      <div ref={scrollRef} style={styles.scrollContainer}>
-        <div style={styles.monthsRow}>
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={anchorOffset}
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: -20 }}
+          transition={{ duration: 0.25 }}
+          style={styles.monthsRow}
+        >
           {months.map(({ year, month }) => {
             const cells = getMonthCells(year, month);
-            const isCurrentMonth = year === today.getFullYear() && month === today.getMonth();
             const label = new Date(year, month, 1).toLocaleString('default', { month: 'short', year: 'numeric' });
 
             return (
-              <div
-                key={`${year}-${month}`}
-                className="month-block"
-                data-current-month={isCurrentMonth ? 'true' : undefined}
-                style={styles.monthBlock}
-              >
+              <div key={`${year}-${month}`} style={styles.monthBlock}>
                 <div style={styles.monthLabel}>{label}</div>
                 <div style={styles.weekdayRow}>
-                  {WEEKDAYS.map((w) => (
-                    <div key={w} style={styles.weekdayCell}>{w[0]}</div>
-                  ))}
+                  {WEEKDAYS.map((w) => <div key={w} style={styles.weekdayCell}>{w[0]}</div>)}
                 </div>
                 <div style={styles.monthGrid}>
                   {cells.map((date, idx) => {
@@ -129,11 +119,7 @@ export default function Calendar({ selectedDate, onSelectDate }) {
                           ...styles.dayCell,
                           background: bg,
                           color: darkText ? '#0d0f12' : 'var(--text-primary)',
-                          outline: isSelected
-                            ? '2px solid var(--accent)'
-                            : isToday
-                            ? '1px solid var(--text-secondary)'
-                            : 'none',
+                          outline: isSelected ? '2px solid var(--accent)' : isToday ? '1px solid var(--text-secondary)' : 'none',
                         }}
                       >
                         {date.getDate()}
@@ -144,49 +130,24 @@ export default function Calendar({ selectedDate, onSelectDate }) {
               </div>
             );
           })}
-        </div>
-      </div>
+        </motion.div>
+      </AnimatePresence>
     </div>
   );
 }
 
 const styles = {
-  wrapper: {
-    background: 'var(--bg-elevated)',
-    border: '1px solid var(--border-color)',
-    borderRadius: '14px',
-    padding: '1.25rem',
-  },
-  headerRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' },
-  title: { margin: 0, fontSize: '1.1rem', fontWeight: 600 },
+  wrapper: { background: 'var(--bg-elevated)', border: '1px solid var(--border-color)', borderRadius: '14px', padding: '1.5rem' },
+  headerRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' },
+  title: { margin: 0, fontSize: '1.2rem', fontWeight: 600 },
   arrowGroup: { display: 'flex', gap: '0.5rem' },
-  navBtn: {
-    background: 'transparent',
-    border: '1px solid var(--border-color)',
-    color: 'var(--text-primary)',
-    borderRadius: '8px',
-    padding: '0.3rem 0.7rem',
-    cursor: 'pointer',
-    fontSize: '0.9rem',
-  },
-  scrollContainer: { overflowX: 'auto', paddingBottom: '0.5rem' },
-  monthsRow: { display: 'flex', gap: '24px' },
-  monthBlock: { flexShrink: 0 },
-  monthLabel: { fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.5rem' },
-  weekdayRow: { display: 'grid', gridTemplateColumns: 'repeat(7, 30px)', gap: '4px', marginBottom: '4px' },
-  weekdayCell: { textAlign: 'center', fontSize: '0.65rem', color: 'var(--text-secondary)' },
-  monthGrid: { display: 'grid', gridTemplateColumns: 'repeat(7, 30px)', gridAutoRows: '30px', gap: '4px' },
-  emptyCell: { width: '30px', height: '30px' },
-  dayCell: {
-    width: '30px',
-    height: '30px',
-    borderRadius: '6px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: '0.7rem',
-    fontWeight: 600,
-    cursor: 'pointer',
-    transition: 'background 0.25s ease',
-  },
-};
+  navBtn: { background: 'transparent', border: '1px solid var(--border-color)', color: 'var(--text-primary)', borderRadius: '8px', padding: '0.4rem 0.9rem', cursor: 'pointer', fontSize: '1rem' },
+ monthsRow: { display: 'flex', gap: '16px', flexWrap: 'nowrap', overflowX: 'auto', paddingBottom: '0.5rem', width: '100%' },
+monthBlock: { flexShrink: 0, minWidth: '228px' },
+monthLabel: { fontSize: '0.9rem', fontWeight: 600, marginBottom: '0.6rem' },
+weekdayRow: { display: 'grid', gridTemplateColumns: 'repeat(7, 28px)', gap: '4px', marginBottom: '5px' },
+weekdayCell: { textAlign: 'center', fontSize: '0.65rem', color: 'var(--text-secondary)' },
+monthGrid: { display: 'grid', gridTemplateColumns: 'repeat(7, 28px)', gridAutoRows: '28px', gap: '4px' },
+emptyCell: { width: '28px', height: '28px' },
+dayCell: { width: '28px', height: '28px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', fontWeight: 600, cursor: 'pointer', transition: 'background 0.25s ease' },
+}
