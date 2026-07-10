@@ -10,7 +10,7 @@ const routineRoutes = require('./routes/routineRoutes');
 connectDB();
 
 app.use(cors({
-  origin: ['http://localhost:5173', 'https://physique-tracker.vercel.app'],
+  origin: ['http://localhost:5173', 'https://consistency-tracker-sandy.vercel.app'],
   credentials: true,
 }));
 app.use(express.json());
