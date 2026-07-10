@@ -26,8 +26,8 @@ function getMonthCells(year, month) {
 const getColor = (completed, total) => {
   if (!total || completed === 0) return 'var(--bg-input)';
   const ratio = completed / total;
-  const start = [22, 101, 52];
-  const end = [187, 247, 208];
+  const start = [20, 83, 45];   // very dark green — clearly green but almost black
+  const end = [34, 197, 94];    // bright accent green (#22c55e) — matches the consistency bar
   const r = Math.round(start[0] + (end[0] - start[0]) * ratio);
   const g = Math.round(start[1] + (end[1] - start[1]) * ratio);
   const b = Math.round(start[2] + (end[2] - start[2]) * ratio);
@@ -41,29 +41,34 @@ export default function Calendar({ selectedDate, onSelectDate }) {
   // anchorOffset = how many months away from "today's month" the window starts
   const [anchorOffset, setAnchorOffset] = useState(-1); // start showing 1 month back
   const [daysData, setDaysData] = useState({});
-
+const [calendarLoading, setCalendarLoading] = useState(false);
+const [calendarError, setCalendarError] = useState('');
   const months = [];
   for (let i = 0; i < VISIBLE_COUNT; i++) {
     months.push(shiftMonth(today.getFullYear(), today.getMonth(), anchorOffset + i));
   }
 
-  useEffect(() => {
-    const fetchAll = async () => {
-      const first = months[0];
-      const last = months[months.length - 1];
-      const start = formatDate(new Date(first.year, first.month, 1));
-      const end = formatDate(new Date(last.year, last.month + 1, 0));
-      try {
-        const res = await axiosInstance.get('/days', { params: { start, end } });
-        const map = {};
-        res.data.forEach((d) => { map[d.date] = d.exercises; });
-        setDaysData(map);
-      } catch {
-        setDaysData({});
-      }
-    };
-    fetchAll();
-  }, [anchorOffset]);
+useEffect(() => {
+  const fetchAll = async () => {
+    setCalendarLoading(true);
+    setCalendarError('');
+    const first = months[0];
+    const last = months[months.length - 1];
+    const start = formatDate(new Date(first.year, first.month, 1));
+    const end = formatDate(new Date(last.year, last.month + 1, 0));
+    try {
+      const res = await axiosInstance.get('/days', { params: { start, end } });
+      const map = {};
+      res.data.forEach((d) => { map[d.date] = d.exercises; });
+      setDaysData(map);
+    } catch {
+      setCalendarError('Could not load activity data.');
+    } finally {
+      setCalendarLoading(false);
+    }
+  };
+  fetchAll();
+}, [anchorOffset]);
 
   const goPrev = () => setAnchorOffset((prev) => prev - 1);
   const goNext = () => setAnchorOffset((prev) => prev + 1);
@@ -77,6 +82,11 @@ export default function Calendar({ selectedDate, onSelectDate }) {
           <motion.button whileTap={{ scale: 0.9 }} onClick={goNext} style={styles.navBtn}>→</motion.button>
         </div>
       </div>
+      {calendarError && (
+  <p style={{ color: 'var(--danger)', fontSize: '0.8rem', margin: '0 0 0.75rem 0' }}>
+    {calendarError}
+  </p>
+)}
 
       <AnimatePresence mode="wait">
         <motion.div
@@ -111,10 +121,12 @@ export default function Calendar({ selectedDate, onSelectDate }) {
 
                     return (
                       <motion.div
-                        key={idx}
-                        whileHover={{ scale: 1.1 }}
-                        whileTap={{ scale: 0.92 }}
-                        onClick={() => onSelectDate(dateStr)}
+  key={idx}
+  whileHover={{ scale: 1.1 }}
+  whileTap={{ scale: 0.92 }}
+  animate={calendarLoading ? { opacity: [1, 0.4, 1] } : { opacity: 1 }}
+  transition={calendarLoading ? { duration: 1, repeat: Infinity } : {}}
+  onClick={() => onSelectDate(dateStr)}
                         style={{
                           ...styles.dayCell,
                           background: bg,

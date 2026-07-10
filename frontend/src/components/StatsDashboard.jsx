@@ -17,7 +17,21 @@ export default function StatsDashboard() {
     fetchStats();
   }, []);
 
-  if (!stats) return null;
+ if (!stats) return (
+  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={styles.wrapper}>
+    <h3 style={styles.title}>Consistency</h3>
+    <div style={styles.grid}>
+      {[1,2,3,4,5].map((i) => (
+        <motion.div
+          key={i}
+          animate={{ opacity: [1, 0.4, 1] }}
+          transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.1 }}
+          style={{ ...styles.card, height: '100px' }}
+        />
+      ))}
+    </div>
+  </motion.div>
+);
 
   const cards = [
     { label: 'Current Streak', value: `${stats.currentStreak} ${stats.currentStreak === 1 ? 'day' : 'days'}`, emoji: '🔥' },

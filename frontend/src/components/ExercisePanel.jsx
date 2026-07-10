@@ -3,13 +3,17 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import axiosInstance from '../api/axiosInstance';
 import { isToday, isPast } from '../utils/dateUtils';
+import Spinner from './Spinner';
+import Confetti from './Confetti';
 
-export default function ExercisePanel({ selectedDate }) {
+export default function ExercisePanel({ selectedDate, onToggle }) {
   const [exercises, setExercises] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [newName, setNewName] = useState('');
+  const [error, setError] = useState('');
+  const [celebrated, setCelebrated] = useState(false);
 
   const past = isPast(selectedDate);
   const today = isToday(selectedDate);
@@ -17,12 +21,15 @@ export default function ExercisePanel({ selectedDate }) {
 
   useEffect(() => {
     setEditMode(false);
+    setCelebrated(false);
     const fetchDay = async () => {
       setLoading(true);
+      setError('');
       try {
         const res = await axiosInstance.get(`/days/${selectedDate}`);
         setExercises(res.data.exercises || []);
       } catch {
+        setError('Failed to load exercises. Check your connection.');
         setExercises([]);
       } finally {
         setLoading(false);
@@ -31,28 +38,33 @@ export default function ExercisePanel({ selectedDate }) {
     fetchDay();
   }, [selectedDate]);
 
-  const saveExercises = async (updatedList) => {
-  setSaving(true);
-  try {
-    await axiosInstance.put(`/days/${selectedDate}`, {
-      exercises: updatedList,
-    });
-    // Don't overwrite local state with the response —
-    // it just swaps tempId -> real _id and causes a remount glitch.
-    // Local state is already correct from the optimistic update.
-  } catch (err) {
-    console.error('Failed to save', err);
-  } finally {
-    setSaving(false);
-  }
-};
-  const handleToggle = (id) => {
-    const updated = exercises.map((ex) =>
-      (ex._id || ex.tempId) === id ? { ...ex, completed: !ex.completed } : ex
-    );
-    setExercises(updated);
-    saveExercises(updated);
+  const checkCelebration = (list) => {
+    if (list.length > 0 && list.every((ex) => ex.completed) && !celebrated) {
+      setCelebrated(true);
+      setTimeout(() => setCelebrated(false), 3000);
+    }
   };
+
+  const saveExercises = async (updatedList) => {
+    setSaving(true);
+    try {
+      await axiosInstance.put(`/days/${selectedDate}`, { exercises: updatedList });
+    } catch {
+      setError('Failed to save. Check your connection.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+const handleToggle = (id) => {
+  const updated = exercises.map((ex) =>
+    (ex._id || ex.tempId) === id ? { ...ex, completed: !ex.completed } : ex
+  );
+  setExercises(updated);
+  checkCelebration(updated);
+  saveExercises(updated);
+  if (onToggle) onToggle();
+};
 
   const handleAdd = () => {
     if (!newName.trim()) return;
@@ -84,24 +96,54 @@ export default function ExercisePanel({ selectedDate }) {
   };
 
   const sorted = [...exercises].sort((a, b) => a.order - b.order);
+  const completedCount = exercises.filter((e) => e.completed).length;
+  const allDone = exercises.length > 0 && completedCount === exercises.length;
 
   return (
     <div style={styles.panel}>
+      {celebrated && <Confetti />}
+
       <div style={styles.headerRow}>
-        <h3 style={styles.dateLabel}>{today ? 'Today' : selectedDate}</h3>
-        {canEdit && (
-          <motion.button
-            whileTap={{ scale: 0.94 }}
-            onClick={() => setEditMode(!editMode)}
-            style={styles.editBtn}
-          >
-            {editMode ? 'Done' : 'Edit'}
-          </motion.button>
-        )}
+        <div>
+          <h3 style={styles.dateLabel}>{today ? 'Today' : selectedDate}</h3>
+          {exercises.length > 0 && (
+            <motion.p
+              key={`${completedCount}/${exercises.length}`}
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              style={{
+                ...styles.progressText,
+                color: allDone ? 'var(--accent)' : 'var(--text-secondary)',
+              }}
+            >
+              {allDone ? '🎉 All done!' : `${completedCount}/${exercises.length} completed`}
+            </motion.p>
+          )}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          {saving && <Spinner size={14} />}
+          {canEdit && (
+            <motion.button
+              whileTap={{ scale: 0.94 }}
+              onClick={() => setEditMode(!editMode)}
+              style={styles.editBtn}
+            >
+              {editMode ? 'Done' : 'Edit'}
+            </motion.button>
+          )}
+        </div>
       </div>
 
+      {error && (
+        <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={styles.errorText}>
+          {error}
+        </motion.p>
+      )}
+
       {loading ? (
-        <div style={styles.loading}>Loading...</div>
+        <div style={styles.centered}>
+          <Spinner size={28} />
+        </div>
       ) : sorted.length === 0 && !editMode ? (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={styles.emptyState}>
           {past ? null : <p>Add exercises for this day</p>}
@@ -115,14 +157,14 @@ export default function ExercisePanel({ selectedDate }) {
                   {sorted.map((ex, index) => {
                     const id = ex._id || ex.tempId;
                     return (
-                      <Draggable key={id} draggableId={String(id)} index={index} isDragDisabled={!editMode}>
+                      <Draggable key={String(id)} draggableId={String(id)} index={index} isDragDisabled={!editMode}>
                         {(dragProvided, snapshot) => (
                           <motion.div
                             ref={dragProvided.innerRef}
                             {...dragProvided.draggableProps}
                             initial={{ opacity: 0, x: -8 }}
                             animate={{ opacity: 1, x: 0 }}
-                            exit={{ opacity: 0 }}
+                            exit={{ opacity: 0, x: 8 }}
                             style={{
                               ...styles.exerciseRow,
                               ...dragProvided.draggableProps.style,
@@ -130,9 +172,7 @@ export default function ExercisePanel({ selectedDate }) {
                             }}
                           >
                             {editMode && (
-                              <span {...dragProvided.dragHandleProps} style={styles.dragHandle}>
-                                ⠿
-                              </span>
+                              <span {...dragProvided.dragHandleProps} style={styles.dragHandle}>⠿</span>
                             )}
                             <motion.div
                               whileTap={{ scale: 0.85 }}
@@ -148,7 +188,7 @@ export default function ExercisePanel({ selectedDate }) {
                               />
                             </motion.div>
                             <motion.span
-                              key={ex.completed}
+                              key={String(ex.completed)}
                               initial={{ opacity: 0.4 }}
                               animate={{ opacity: 1 }}
                               transition={{ duration: 0.25 }}
@@ -161,9 +201,7 @@ export default function ExercisePanel({ selectedDate }) {
                                 whileTap={{ scale: 0.9 }}
                                 onClick={() => handleDelete(id)}
                                 style={styles.deleteBtn}
-                              >
-                                ✕
-                              </motion.button>
+                              >✕</motion.button>
                             )}
                           </motion.div>
                         )}
@@ -188,8 +226,13 @@ export default function ExercisePanel({ selectedDate }) {
             onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
             style={styles.addInput}
           />
-          <motion.button whileTap={{ scale: 0.94 }} onClick={handleAdd} style={styles.addBtn}>
-            Add
+          <motion.button
+            whileTap={{ scale: 0.94 }}
+            onClick={handleAdd}
+            disabled={saving}
+            style={{ ...styles.addBtn, opacity: saving ? 0.6 : 1 }}
+          >
+            {saving ? <Spinner size={14} color="#0d0f12" /> : 'Add'}
           </motion.button>
         </motion.div>
       )}
@@ -198,63 +241,21 @@ export default function ExercisePanel({ selectedDate }) {
 }
 
 const styles = {
-  panel: {
-    background: 'var(--bg-elevated)',
-    border: '1px solid var(--border-color)',
-    borderRadius: '14px',
-    padding: '1.25rem',
-    height: '100%',
-  },
-  headerRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' },
+  panel: { background: 'var(--bg-elevated)', border: '1px solid var(--border-color)', borderRadius: '14px', padding: '1.25rem', height: '100%' },
+  headerRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' },
   dateLabel: { margin: 0, fontSize: '1.1rem', fontWeight: 600 },
-  editBtn: {
-    background: 'transparent',
-    border: '1px solid var(--accent)',
-    color: 'var(--accent)',
-    borderRadius: '6px',
-    padding: '0.3rem 0.7rem',
-    fontSize: '0.8rem',
-    cursor: 'pointer',
-  },
-  loading: { color: 'var(--text-secondary)', fontSize: '0.9rem' },
+  progressText: { margin: '0.2rem 0 0 0', fontSize: '0.8rem' },
+  editBtn: { background: 'transparent', border: '1px solid var(--accent)', color: 'var(--accent)', borderRadius: '6px', padding: '0.3rem 0.7rem', fontSize: '0.8rem', cursor: 'pointer' },
+  centered: { display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '2rem' },
+  errorText: { color: 'var(--danger)', fontSize: '0.82rem', marginBottom: '0.75rem' },
   emptyState: { color: 'var(--text-secondary)', fontSize: '0.9rem', fontStyle: 'italic' },
-  exerciseRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.6rem',
-    padding: '0.5rem 0.25rem',
-    borderBottom: '1px solid var(--border-color)',
-    borderRadius: '6px',
-  },
+  exerciseRow: { display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.5rem 0.25rem', borderBottom: '1px solid var(--border-color)', borderRadius: '6px' },
   dragHandle: { cursor: 'grab', color: 'var(--text-secondary)' },
   checkbox: { accentColor: 'var(--accent)', width: '16px', height: '16px', cursor: 'pointer' },
   exerciseText: { flex: 1 },
- completedText: { flex: 1, color: 'var(--accent)', fontWeight: 600 },
-  deleteBtn: {
-    background: 'transparent',
-    border: 'none',
-    color: 'var(--danger)',
-    cursor: 'pointer',
-    fontSize: '0.9rem',
-  },
+  completedText: { flex: 1, color: 'var(--accent)', fontWeight: 600 },
+  deleteBtn: { background: 'transparent', border: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: '0.9rem' },
   addRow: { display: 'flex', gap: '0.5rem', marginTop: '1rem' },
-  addInput: {
-    flex: 1,
-    background: 'var(--bg-input)',
-    border: '1px solid var(--border-color)',
-    borderRadius: '8px',
-    padding: '0.5rem 0.75rem',
-    color: 'var(--text-primary)',
-    fontSize: '0.9rem',
-    outline: 'none',
-  },
-  addBtn: {
-    background: 'var(--accent)',
-    color: '#0d0f12',
-    border: 'none',
-    borderRadius: '8px',
-    padding: '0.5rem 1rem',
-    fontWeight: 600,
-    cursor: 'pointer',
-  },
+  addInput: { flex: 1, background: 'var(--bg-input)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '0.5rem 0.75rem', color: 'var(--text-primary)', fontSize: '0.9rem', outline: 'none' },
+  addBtn: { background: 'var(--accent)', color: '#0d0f12', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', minWidth: '52px' },
 };

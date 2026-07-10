@@ -4,23 +4,33 @@ import ExercisePanel from '../components/ExercisePanel';
 import { formatDate } from '../utils/dateUtils';
 import Calendar from '../components/Calendar';
 import StatsDashboard from '../components/StatsDashboard';
+import WeeklyRoutineWidget from '../components/WeeklyRoutineWidget';
+
 
 export default function Home() {
   const [selectedDate, setSelectedDate] = useState(formatDate(new Date()));
+  const [calendarKey, setCalendarKey] = useState(0);
 
+const handleRoutineApplied = () => setCalendarKey((k) => k + 1);
+const handleExerciseToggled = () => setCalendarKey((k) => k + 1);
   return (
-    <div style={styles.page}>
-      <Header />
-      <div style={styles.body}>
-        <div style={styles.left}>
-          <ExercisePanel selectedDate={selectedDate} />
-        </div>
-        <div style={styles.right}>
-          <Calendar selectedDate={selectedDate} onSelectDate={setSelectedDate} />
-           <StatsDashboard />
-        </div>
-      </div>
+<div style={styles.page}>
+  <Header />
+  <WeeklyRoutineWidget onRoutineApplied={handleRoutineApplied} />
+  <div style={styles.body}>
+    <div style={styles.left}>
+      <ExercisePanel
+  key={`${selectedDate}-${calendarKey}`}
+  selectedDate={selectedDate}
+  onToggle={handleExerciseToggled}
+/>
     </div>
+    <div style={styles.right}>
+      <Calendar key={calendarKey} selectedDate={selectedDate} onSelectDate={setSelectedDate} />
+      <StatsDashboard />
+    </div>
+  </div>
+</div>
   );
 }
 
