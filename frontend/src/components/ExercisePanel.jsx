@@ -5,6 +5,7 @@ import axiosInstance from '../api/axiosInstance';
 import { isToday, isPast } from '../utils/dateUtils';
 import Spinner from './Spinner';
 import Confetti from './Confetti';
+import ProgressRing from './ProgressRing';
 
 export default function ExercisePanel({ selectedDate, onToggle }) {
   const [exercises, setExercises] = useState([]);
@@ -63,27 +64,28 @@ const handleToggle = (id) => {
   setExercises(updated);
   checkCelebration(updated);
   saveExercises(updated);
-  if (onToggle) onToggle();
+  if (onToggle) onToggle(selectedDate, updated);
+};
+const handleAdd = () => {
+  if (!newName.trim()) return;
+  const updated = [
+    ...exercises,
+    { name: newName.trim(), completed: false, order: exercises.length, tempId: Date.now() },
+  ];
+  setExercises(updated);
+  setNewName('');
+  saveExercises(updated);
+  if (onToggle) onToggle(selectedDate, updated);
 };
 
-  const handleAdd = () => {
-    if (!newName.trim()) return;
-    const updated = [
-      ...exercises,
-      { name: newName.trim(), completed: false, order: exercises.length, tempId: Date.now() },
-    ];
-    setExercises(updated);
-    setNewName('');
-    saveExercises(updated);
-  };
-
-  const handleDelete = (id) => {
-    const updated = exercises
-      .filter((ex) => (ex._id || ex.tempId) !== id)
-      .map((ex, idx) => ({ ...ex, order: idx }));
-    setExercises(updated);
-    saveExercises(updated);
-  };
+const handleDelete = (id) => {
+  const updated = exercises
+    .filter((ex) => (ex._id || ex.tempId) !== id)
+    .map((ex, idx) => ({ ...ex, order: idx }));
+  setExercises(updated);
+  saveExercises(updated);
+  if (onToggle) onToggle(selectedDate, updated);
+};
 
   const handleDragEnd = (result) => {
     if (!result.destination) return;
@@ -103,36 +105,39 @@ const handleToggle = (id) => {
     <div style={styles.panel}>
       {celebrated && <Confetti />}
 
-      <div style={styles.headerRow}>
-        <div>
-          <h3 style={styles.dateLabel}>{today ? 'Today' : selectedDate}</h3>
-          {exercises.length > 0 && (
-            <motion.p
-              key={`${completedCount}/${exercises.length}`}
-              initial={{ opacity: 0, y: -4 }}
-              animate={{ opacity: 1, y: 0 }}
-              style={{
-                ...styles.progressText,
-                color: allDone ? 'var(--accent)' : 'var(--text-secondary)',
-              }}
-            >
-              {allDone ? '🎉 All done!' : `${completedCount}/${exercises.length} completed`}
-            </motion.p>
-          )}
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          {saving && <Spinner size={14} />}
-          {canEdit && (
-            <motion.button
-              whileTap={{ scale: 0.94 }}
-              onClick={() => setEditMode(!editMode)}
-              style={styles.editBtn}
-            >
-              {editMode ? 'Done' : 'Edit'}
-            </motion.button>
-          )}
-        </div>
-      </div>
+    <div style={styles.headerRow}>
+  <div style={{ display: 'flex', alignItems: 'center', gap: '0.9rem' }}>
+    <ProgressRing completed={completedCount} total={exercises.length} size={54} />
+    <div>
+      <h3 style={styles.dateLabel}>{today ? 'Today' : selectedDate}</h3>
+      {exercises.length > 0 && (
+        <motion.p
+          key={`${completedCount}/${exercises.length}`}
+          initial={{ opacity: 0, y: -4 }}
+          animate={{ opacity: 1, y: 0 }}
+          style={{
+            ...styles.progressText,
+            color: allDone ? 'var(--accent)' : 'var(--text-secondary)',
+          }}
+        >
+          {allDone ? '🎉 All done!' : `${completedCount}/${exercises.length} completed`}
+        </motion.p>
+      )}
+    </div>
+  </div>
+  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+    {saving && <Spinner size={14} />}
+    {canEdit && (
+      <motion.button
+        whileTap={{ scale: 0.94 }}
+        onClick={() => setEditMode(!editMode)}
+        style={styles.editBtn}
+      >
+        {editMode ? 'Done' : 'Edit'}
+      </motion.button>
+    )}
+  </div>
+</div>
 
       {error && (
         <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={styles.errorText}>

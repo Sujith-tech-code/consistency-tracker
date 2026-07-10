@@ -34,7 +34,7 @@ const getColor = (completed, total) => {
   return `rgb(${r}, ${g}, ${b})`;
 };
 
-export default function Calendar({ selectedDate, onSelectDate }) {
+export default function Calendar({ selectedDate, onSelectDate, dayOverrides = {} }) {
   const today = new Date();
   const todayStr = formatDate(today);
 
@@ -111,9 +111,9 @@ useEffect(() => {
                   {cells.map((date, idx) => {
                     if (!date) return <div key={idx} style={styles.emptyCell} />;
                     const dateStr = formatDate(date);
-                    const exercises = daysData[dateStr] || [];
-                    const total = exercises.length;
-                    const completed = exercises.filter((e) => e.completed).length;
+                   const exercises = dayOverrides[dateStr] ?? daysData[dateStr] ?? [];
+                  const total = exercises.length;
+                  const completed = exercises.filter((e) => e.completed).length;
                     const bg = getColor(completed, total);
                     const isSelected = dateStr === selectedDate;
                     const isToday = dateStr === todayStr;

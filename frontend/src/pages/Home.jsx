@@ -9,25 +9,29 @@ import WeeklyRoutineWidget from '../components/WeeklyRoutineWidget';
 
 export default function Home() {
   const [selectedDate, setSelectedDate] = useState(formatDate(new Date()));
-  const [calendarKey, setCalendarKey] = useState(0);
+const [calendarKey, setCalendarKey] = useState(0);
+const [statsKey, setStatsKey] = useState(0);
+const [dayOverrides, setDayOverrides] = useState({});
 
-const handleRoutineApplied = () => setCalendarKey((k) => k + 1);
-const handleExerciseToggled = () => setCalendarKey((k) => k + 1);
+const handleRoutineApplied = () => {
+  setCalendarKey((k) => k + 1);
+  setStatsKey((k) => k + 1);
+};
+const handleExerciseToggled = (dateStr, updatedExercises) => {
+  setDayOverrides((prev) => ({ ...prev, [dateStr]: updatedExercises }));
+  setStatsKey((k) => k + 1);
+};
   return (
 <div style={styles.page}>
   <Header />
   <WeeklyRoutineWidget onRoutineApplied={handleRoutineApplied} />
   <div style={styles.body}>
     <div style={styles.left}>
-      <ExercisePanel
-  key={`${selectedDate}-${calendarKey}`}
-  selectedDate={selectedDate}
-  onToggle={handleExerciseToggled}
-/>
+     <ExercisePanel key={selectedDate} selectedDate={selectedDate} onToggle={handleExerciseToggled} />
     </div>
     <div style={styles.right}>
-      <Calendar key={calendarKey} selectedDate={selectedDate} onSelectDate={setSelectedDate} />
-      <StatsDashboard />
+     <Calendar key={calendarKey} selectedDate={selectedDate} onSelectDate={setSelectedDate} dayOverrides={dayOverrides} />
+     <StatsDashboard key={statsKey} />
     </div>
   </div>
 </div>

@@ -26,3 +26,19 @@ body {
 input, button {
   font-family: inherit;
 }
+[data-theme="light"] {
+  --bg-primary: #f0f4f8;
+  --bg-elevated: #ffffff;
+  --bg-input: #e8edf2;
+  --border-color: #d1d9e0;
+  --text-primary: #0d1117;
+  --text-secondary: #57606a;
+  --accent: #16a34a;
+  --accent-dim: #15803d;
+  --accent-glow: rgba(22, 163, 74, 0.3);
+  --danger: #dc2626;
+}
+
+[data-theme="light"] body {
+  background: linear-gradient(135deg, #f0f4f8 0%, #e8edf2 100%);
+}
