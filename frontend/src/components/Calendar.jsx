@@ -5,7 +5,7 @@ import axiosInstance from '../api/axiosInstance';
 import { formatDate } from '../utils/dateUtils';
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const VISIBLE_COUNT = 4; // how many months shown at once
+
 
 function shiftMonth(year, month, delta) {
   const d = new Date(year, month + delta, 1);
@@ -34,7 +34,7 @@ const getColor = (completed, total) => {
   return `rgb(${r}, ${g}, ${b})`;
 };
 
-export default function Calendar({ selectedDate, onSelectDate, dayOverrides = {} }) {
+export default function Calendar({ selectedDate, onSelectDate, dayOverrides = {}, monthsToShow = 4 }) {
   const today = new Date();
   const todayStr = formatDate(today);
 
@@ -44,7 +44,7 @@ export default function Calendar({ selectedDate, onSelectDate, dayOverrides = {}
 const [calendarLoading, setCalendarLoading] = useState(false);
 const [calendarError, setCalendarError] = useState('');
   const months = [];
-  for (let i = 0; i < VISIBLE_COUNT; i++) {
+for (let i = 0; i < monthsToShow; i++) {
     months.push(shiftMonth(today.getFullYear(), today.getMonth(), anchorOffset + i));
   }
 
