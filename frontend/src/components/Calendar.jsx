@@ -1,11 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useEffect } from 'react';
 import axiosInstance from '../api/axiosInstance';
 import { formatDate } from '../utils/dateUtils';
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
 
 function shiftMonth(year, month, delta) {
   const d = new Date(year, month + delta, 1);
@@ -26,8 +24,8 @@ function getMonthCells(year, month) {
 const getColor = (completed, total) => {
   if (!total || completed === 0) return 'var(--bg-input)';
   const ratio = completed / total;
-  const start = [20, 83, 45];   // very dark green — clearly green but almost black
-  const end = [34, 197, 94];    // bright accent green (#22c55e) — matches the consistency bar
+  const start = [20, 83, 45];
+  const end = [34, 197, 94];
   const r = Math.round(start[0] + (end[0] - start[0]) * ratio);
   const g = Math.round(start[1] + (end[1] - start[1]) * ratio);
   const b = Math.round(start[2] + (end[2] - start[2]) * ratio);
@@ -35,58 +33,64 @@ const getColor = (completed, total) => {
 };
 
 export default function Calendar({ selectedDate, onSelectDate, dayOverrides = {}, monthsToShow = 4 }) {
+  const isSingle = monthsToShow === 1;
   const today = new Date();
   const todayStr = formatDate(today);
 
-  // anchorOffset = how many months away from "today's month" the window starts
-  const [anchorOffset, setAnchorOffset] = useState(-1); // start showing 1 month back
+  const [anchorOffset, setAnchorOffset] = useState(-1);
   const [daysData, setDaysData] = useState({});
-const [calendarLoading, setCalendarLoading] = useState(false);
-const [calendarError, setCalendarError] = useState('');
+  const [calendarLoading, setCalendarLoading] = useState(false);
+  const [calendarError, setCalendarError] = useState('');
+
   const months = [];
-for (let i = 0; i < monthsToShow; i++) {
+  for (let i = 0; i < monthsToShow; i++) {
     months.push(shiftMonth(today.getFullYear(), today.getMonth(), anchorOffset + i));
   }
 
-useEffect(() => {
-  const fetchAll = async () => {
-    setCalendarLoading(true);
-    setCalendarError('');
-    const first = months[0];
-    const last = months[months.length - 1];
-    const start = formatDate(new Date(first.year, first.month, 1));
-    const end = formatDate(new Date(last.year, last.month + 1, 0));
-    try {
-      const res = await axiosInstance.get('/days', { params: { start, end } });
-      const map = {};
-      res.data.forEach((d) => { map[d.date] = d.exercises; });
-      setDaysData(map);
-    } catch {
-      setCalendarError('Could not load activity data.');
-    } finally {
-      setCalendarLoading(false);
-    }
-  };
-  fetchAll();
-}, [anchorOffset]);
+  useEffect(() => {
+    const fetchAll = async () => {
+      setCalendarLoading(true);
+      setCalendarError('');
+      const first = months[0];
+      const last = months[months.length - 1];
+      const start = formatDate(new Date(first.year, first.month, 1));
+      const end = formatDate(new Date(last.year, last.month + 1, 0));
+      try {
+        const res = await axiosInstance.get('/days', { params: { start, end } });
+        const map = {};
+        res.data.forEach((d) => { map[d.date] = d.exercises; });
+        setDaysData(map);
+      } catch {
+        setCalendarError('Could not load activity data.');
+      } finally {
+        setCalendarLoading(false);
+      }
+    };
+    fetchAll();
+  }, [anchorOffset]);
 
   const goPrev = () => setAnchorOffset((prev) => prev - 1);
   const goNext = () => setAnchorOffset((prev) => prev + 1);
 
   return (
     <div style={styles.wrapper}>
+      {/* Header */}
       <div style={styles.headerRow}>
         <h3 style={styles.title}>Activity</h3>
-        <div style={styles.arrowGroup}>
-          <motion.button whileTap={{ scale: 0.9 }} onClick={goPrev} style={styles.navBtn}>←</motion.button>
-          <motion.button whileTap={{ scale: 0.9 }} onClick={goNext} style={styles.navBtn}>→</motion.button>
-        </div>
+        {/* Desktop arrows — top right */}
+        {!isSingle && (
+          <div style={styles.arrowGroup}>
+            <motion.button whileTap={{ scale: 0.9 }} onClick={goPrev} style={styles.navBtn}>←</motion.button>
+            <motion.button whileTap={{ scale: 0.9 }} onClick={goNext} style={styles.navBtn}>→</motion.button>
+          </div>
+        )}
       </div>
+
       {calendarError && (
-  <p style={{ color: 'var(--danger)', fontSize: '0.8rem', margin: '0 0 0.75rem 0' }}>
-    {calendarError}
-  </p>
-)}
+        <p style={{ color: 'var(--danger)', fontSize: '0.8rem', margin: '0 0 0.75rem 0' }}>
+          {calendarError}
+        </p>
+      )}
 
       <AnimatePresence mode="wait">
         <motion.div
@@ -95,25 +99,45 @@ useEffect(() => {
           animate={{ opacity: 1, x: 0 }}
           exit={{ opacity: 0, x: -20 }}
           transition={{ duration: 0.25 }}
-          style={styles.monthsRow}
+          style={isSingle ? styles.monthsRowSingle : styles.monthsRow}
         >
           {months.map(({ year, month }) => {
             const cells = getMonthCells(year, month);
-            const label = new Date(year, month, 1).toLocaleString('default', { month: 'short', year: 'numeric' });
+            const label = new Date(year, month, 1).toLocaleString('default', { month: 'long', year: 'numeric' });
 
             return (
-              <div key={`${year}-${month}`} style={styles.monthBlock}>
-                <div style={styles.monthLabel}>{label}</div>
-                <div style={styles.weekdayRow}>
-                  {WEEKDAYS.map((w) => <div key={w} style={styles.weekdayCell}>{w[0]}</div>)}
+              <div
+                key={`${year}-${month}`}
+                style={isSingle ? styles.monthBlockSingle : styles.monthBlock}
+              >
+                {/* Mobile: arrows inline beside month label */}
+                {isSingle ? (
+                  <div style={styles.mobileLabelRow}>
+                    <motion.button whileTap={{ scale: 0.9 }} onClick={goPrev} style={styles.navBtn}>←</motion.button>
+                    <span style={{ fontSize: '0.95rem', fontWeight: 600 }}>{label}</span>
+                    <motion.button whileTap={{ scale: 0.9 }} onClick={goNext} style={styles.navBtn}>→</motion.button>
+                  </div>
+                ) : (
+                  <div style={styles.monthLabel}>{label}</div>
+                )}
+
+                {/* Weekday headers */}
+                <div style={isSingle ? styles.weekdayRowFull : styles.weekdayRow}>
+                  {WEEKDAYS.map((w) => (
+                    <div key={w} style={styles.weekdayCell}>{w[0]}</div>
+                  ))}
                 </div>
-                <div style={styles.monthGrid}>
+
+                {/* Day cells */}
+                <div style={isSingle ? styles.monthGridFull : styles.monthGrid}>
                   {cells.map((date, idx) => {
-                    if (!date) return <div key={idx} style={styles.emptyCell} />;
+                    if (!date) return (
+                      <div key={idx} style={isSingle ? styles.emptyCellFull : styles.emptyCell} />
+                    );
                     const dateStr = formatDate(date);
-                   const exercises = dayOverrides[dateStr] ?? daysData[dateStr] ?? [];
-                  const total = exercises.length;
-                  const completed = exercises.filter((e) => e.completed).length;
+                    const exercises = dayOverrides[dateStr] ?? daysData[dateStr] ?? [];
+                    const total = exercises.length;
+                    const completed = exercises.filter((e) => e.completed).length;
                     const bg = getColor(completed, total);
                     const isSelected = dateStr === selectedDate;
                     const isToday = dateStr === todayStr;
@@ -121,14 +145,14 @@ useEffect(() => {
 
                     return (
                       <motion.div
-  key={idx}
-  whileHover={{ scale: 1.1 }}
-  whileTap={{ scale: 0.92 }}
-  animate={calendarLoading ? { opacity: [1, 0.4, 1] } : { opacity: 1 }}
-  transition={calendarLoading ? { duration: 1, repeat: Infinity } : {}}
-  onClick={() => onSelectDate(dateStr)}
+                        key={dateStr}
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.92 }}
+                        animate={calendarLoading ? { opacity: [1, 0.4, 1] } : { opacity: 1 }}
+                        transition={calendarLoading ? { duration: 1, repeat: Infinity } : {}}
+                        onClick={() => onSelectDate(dateStr)}
                         style={{
-                          ...styles.dayCell,
+                          ...(isSingle ? styles.dayCellFull : styles.dayCell),
                           background: bg,
                           color: darkText ? '#0d0f12' : 'var(--text-primary)',
                           outline: isSelected ? '2px solid var(--accent)' : isToday ? '1px solid var(--text-secondary)' : 'none',
@@ -149,17 +173,29 @@ useEffect(() => {
 }
 
 const styles = {
+  // Shared
   wrapper: { background: 'var(--bg-elevated)', border: '1px solid var(--border-color)', borderRadius: '14px', padding: '1.5rem' },
   headerRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' },
   title: { margin: 0, fontSize: '1.2rem', fontWeight: 600 },
   arrowGroup: { display: 'flex', gap: '0.5rem' },
   navBtn: { background: 'transparent', border: '1px solid var(--border-color)', color: 'var(--text-primary)', borderRadius: '8px', padding: '0.4rem 0.9rem', cursor: 'pointer', fontSize: '1rem' },
- monthsRow: { display: 'flex', gap: '16px', flexWrap: 'nowrap', overflowX: 'auto', paddingBottom: '0.5rem', width: '100%' },
-monthBlock: { flexShrink: 0, minWidth: '228px' },
-monthLabel: { fontSize: '0.9rem', fontWeight: 600, marginBottom: '0.6rem' },
-weekdayRow: { display: 'grid', gridTemplateColumns: 'repeat(7, 28px)', gap: '4px', marginBottom: '5px' },
-weekdayCell: { textAlign: 'center', fontSize: '0.65rem', color: 'var(--text-secondary)' },
-monthGrid: { display: 'grid', gridTemplateColumns: 'repeat(7, 28px)', gridAutoRows: '28px', gap: '4px' },
-emptyCell: { width: '28px', height: '28px' },
-dayCell: { width: '28px', height: '28px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', fontWeight: 600, cursor: 'pointer', transition: 'background 0.25s ease' },
-}
+  weekdayCell: { textAlign: 'center', fontSize: '0.65rem', color: 'var(--text-secondary)' },
+
+  // Desktop styles (unchanged)
+  monthsRow: { display: 'flex', gap: '16px', flexWrap: 'nowrap', overflowX: 'auto', paddingBottom: '0.5rem', width: '100%' },
+  monthBlock: { flexShrink: 0, minWidth: '228px' },
+  monthLabel: { fontSize: '0.9rem', fontWeight: 600, marginBottom: '0.6rem' },
+  weekdayRow: { display: 'grid', gridTemplateColumns: 'repeat(7, 28px)', gap: '4px', marginBottom: '5px' },
+  monthGrid: { display: 'grid', gridTemplateColumns: 'repeat(7, 28px)', gridAutoRows: '28px', gap: '4px' },
+  emptyCell: { width: '28px', height: '28px' },
+  dayCell: { width: '28px', height: '28px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', fontWeight: 600, cursor: 'pointer', transition: 'background 0.25s ease' },
+
+  // Mobile-only styles
+  monthsRowSingle: { display: 'flex', width: '100%' },
+  monthBlockSingle: { width: '100%', minWidth: 0 },
+  mobileLabelRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.8rem' },
+  weekdayRowFull: { display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', marginBottom: '5px' },
+  monthGridFull: { display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gridAutoRows: '40px', gap: '4px' },
+  emptyCellFull: { width: '100%', height: '40px' },
+  dayCellFull: { width: '100%', height: '40px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer', transition: 'background 0.25s ease' },
+};
